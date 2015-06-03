@@ -33,4 +33,21 @@ class WeatherTodayTests: XCTestCase {
         }
     }
     
+    func testWeatherCompleting() {
+        var weather : Weather = Weather()
+        var weather_copy : Weather = Weather()
+        var weatherArray : [AnyObject] = [AnyObject]()
+        weather.completeWithJson(weatherArray)
+        var weatherDic : NSDictionary = ["humidity": "10"]
+      
+        weatherArray.append(weatherDic)
+        weather.completeWithJson(weatherArray)
+       
+        XCTAssertEqual(weather.humidity!, "10", "humidity match!")
+        
+        
+        
+        
+    }
+    
 }

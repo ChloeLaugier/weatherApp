@@ -8,24 +8,29 @@
 
 import UIKit
 
-class SearchTableViewController: UITableViewController, UISearchBarDelegate, UISearchDisplayDelegate {
+
+class SearchTableViewController: UITableViewController, UISearchBarDelegate, UISearchDisplayDelegate, CitiesLoaderDelegate {
     
     
-    var cities = [String]()
+    var cities = [City]()
+    var stored_cities = [City]()
+    
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        // Uncomment the following line to preserve selection between presentations
-        // self.clearsSelectionOnViewWillAppear = false
-
-        // Uncomment the following line to display an Edit button in the navigation bar for this view controller.
-        // self.navigationItem.rightBarButtonItem = self.editButtonItem()
+    }
+    
+    
+    override func viewWillAppear(animated: Bool) {
+        super.viewWillAppear(animated)
+        self.stored_cities = StoredCities.getStoredCities()
+        self.tableView.reloadData()
+        
+       
     }
 
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
-        // Dispose of any resources that can be recreated.
     }
 
     // MARK: - Table view data source
@@ -35,11 +40,10 @@ class SearchTableViewController: UITableViewController, UISearchBarDelegate, UIS
     }
 
     override func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        if tableView == self.searchDisplayController!.searchResultsTableView {
-          
+        if tableView == self.getSearchDisplayController().searchResultsTableView {
             return self.cities.count
         } else {
-            return 1
+            return self.stored_cities.count
         }
     }
 
@@ -47,23 +51,28 @@ class SearchTableViewController: UITableViewController, UISearchBarDelegate, UIS
     override func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
         let cell = self.tableView.dequeueReusableCellWithIdentifier("Cell") as! UITableViewCell
         
-        
-        if tableView == self.searchDisplayController!.searchResultsTableView {
+        if tableView == self.getSearchDisplayController().searchResultsTableView {
             if (indexPath.row < cities.count) {
-                cell.textLabel!.text = self.cities[indexPath.row];
+                cell.textLabel!.text = self.cities[indexPath.row].name;
             }
-            else {
-                cell.textLabel!.text =  "";
-            }
-            
-            
-            
             
         } else {
-            cell.textLabel!.text = "not yet";
+            cell.textLabel!.text = self.stored_cities[indexPath.row].name;
         }
 
         return cell;
+    }
+    
+    
+    
+    override func tableView(tableView: UITableView, didSelectRowAtIndexPath indexPath: NSIndexPath) {
+        
+        if tableView == self.getSearchDisplayController().searchResultsTableView {
+            StoredCities.saveCity(self.cities[indexPath.row].name!)
+            StoredCities.deleteFirstIfMoreThan10()
+        }
+        self.performSegueWithIdentifier("weatherDetail", sender: tableView)
+
     }
     
 
@@ -102,15 +111,24 @@ class SearchTableViewController: UITableViewController, UISearchBarDelegate, UIS
     }
     */
 
-    /*
+    
     // MARK: - Navigation
 
-    // In a storyboard-based application, you will often want to do a little preparation before navigation
     override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?) {
-        // Get the new view controller using [segue destinationViewController].
-        // Pass the selected object to the new view controller.
+        if segue.identifier == "weatherDetail" {
+            let weatherDetailViewController = segue.destinationViewController as! UIViewController
+            if sender as! UITableView == self.getSearchDisplayController().searchResultsTableView {
+                let indexPath = self.getSearchDisplayController().searchResultsTableView.indexPathForSelectedRow()!
+                let destinationTitle = self.cities[indexPath.row].name
+                weatherDetailViewController.title = destinationTitle
+            } else {
+                let indexPath = self.tableView.indexPathForSelectedRow()!
+                let destinationTitle = self.stored_cities[indexPath.row].name
+                weatherDetailViewController.title = destinationTitle
+            }
+        }
     }
-    */
+
     
     func filterContentForSearchText(searchText: String) {
         
@@ -118,41 +136,30 @@ class SearchTableViewController: UITableViewController, UISearchBarDelegate, UIS
         if (count(searchText)<3) {
             return;
         }
-        var searchTextEscaped = searchText.stringByAddingPercentEscapesUsingEncoding(NSUTF8StringEncoding)
-        var postEndpoint: String = "http://gd.geobytes.com/AutoCompleteCity?q="+searchTextEscaped!
-        var urlRequest = NSURLRequest(URL: NSURL(string: postEndpoint)!)
+        var citiesLoader : CitiesLoader = CitiesLoader()
+        citiesLoader.delegate = self
+        citiesLoader.load(searchText)
         
-        NSURLConnection.sendAsynchronousRequest(urlRequest, queue: NSOperationQueue(), completionHandler:{
-            (response:NSURLResponse!, data: NSData!, error: NSError!) -> Void in
-            if let anError = error
-            {
-                println("error calling geobytes")
-            }
-            else
-            {
-                var jsonError: NSError?
-                let jsonCities = NSJSONSerialization.JSONObjectWithData(data, options: nil, error: &jsonError) as! NSArray
-                if let aJSONError = jsonError
-                {
-                    println("error parsing")
-                }
-                else
-                {
-                    self.cities = [];
-                    dispatch_async(dispatch_get_main_queue(), { () -> Void in
-                        self.searchDisplayController!.searchResultsTableView.reloadData()
-                    })
-                    for city in jsonCities {
-                        self.cities.append(city as! String);
-                    }
-                    dispatch_async(dispatch_get_main_queue(), { () -> Void in
-                        self.searchDisplayController!.searchResultsTableView.reloadData()
-                    })
-                    
-                }
-            }
-        })
+        
     }
+    
+    // MARK: - Cities loader delegate
+    
+    func citiesLoaded(cities: [City]) {
+        //dispatch_async(dispatch_get_main_queue(), { () -> Void in
+        self.cities = cities
+        self.getSearchDisplayController().searchResultsTableView.reloadData()
+        //})
+
+    }
+    
+    
+    
+    func getSearchDisplayController() -> UISearchDisplayController {
+        return self.searchDisplayController!
+    }
+    
+    // MARK: - UISearchDisplayController delegate
     
     func searchDisplayController(controller: UISearchDisplayController, shouldReloadTableForSearchString searchString: String!) -> Bool {
         self.filterContentForSearchText(searchString)
@@ -163,5 +170,7 @@ class SearchTableViewController: UITableViewController, UISearchBarDelegate, UIS
         self.filterContentForSearchText(self.searchDisplayController!.searchBar.text)
         return true
     }
-
+    
+    
+    
 }
